@@ -2,236 +2,150 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Your Dictionary</title>
 <link rel="stylesheet" href="style.css">
-<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
 </head>
 <body>
+
 <!-- HEADER -->
 <header class="header">
-  <div class="header-inner">
-    <div class="logo">
-      <svg class="logo-icon" viewBox="0 0 40 32" fill="none">
-        <rect x="2" y="24" width="36" height="4" rx="2" fill="#1a3a8f"/>
-        <path d="M20 4 C10 4 4 10 4 20 L20 18 L36 20 C36 10 30 4 20 4Z" fill="#1a3a8f" opacity="0.15"/>
-        <path d="M4 20 C4 20 20 16 36 20" stroke="#1a3a8f" stroke-width="2.5" fill="none"/>
-        <path d="M20 4 L20 18" stroke="#1a3a8f" stroke-width="2"/>
-        <path d="M6 8 C6 8 20 6 34 8" stroke="#1a3a8f" stroke-width="2" fill="none"/>
-        <path d="M5 12 C5 12 20 10 35 12" stroke="#1a3a8f" stroke-width="1.5" fill="none" opacity="0.6"/>
-      </svg>
-      <span class="logo-text">Your<br><strong>Dictionary</strong></span>
-    </div>
-    <nav class="nav">
-      <a href="index.html" class="nav-link active">Home</a>
-      <a href="translate.html" class="nav-link">Translate</a>
-      <a href="favorites.html" class="nav-link">Favorites</a>
-      <a href="languages.html" class="nav-link">Languages</a>
-      <a href="quiz.html" class="nav-link">Quiz</a>
-    </nav>
-    <div class="header-right">
-      <div class="online-status" id="onlineStatus">🌐</div>
-      <button class="menu-btn" id="menuBtn" aria-label="Menu">
-        <span></span><span></span><span></span>
-      </button>
-    </div>
+  <div class="hdr-left">
+    <img src="logo.png" class="hdr-logo" alt="" onerror="this.style.display='none'">
+    <span class="hdr-title">YourDict</span>
+  </div>
+  <div class="hdr-right">
+    <span class="offline-badge" id="offlineBadge" style="display:none">⚡ Offline</span>
+    <button class="hdr-btn" onclick="toggleTheme()" id="themeBtn">🌙</button>
   </div>
 </header>
 
-<!-- MOBILE NAV -->
-<div class="mobile-nav" id="mobileNav">
-  <a href="index.html">🏠 Home</a>
-  <a href="translate.html">🌍 Translate</a>
-  <a href="favorites.html">❤️ Favorites</a>
-  <a href="languages.html">📦 Language Packs</a>
-  <a href="quiz.html">🧠 Quiz</a>
-</div>
-
-<!-- HERO -->
-<section class="hero">
-  <div class="hero-bg">
-    <div class="blob b1"></div>
-    <div class="blob b2"></div>
-    <div class="blob b3"></div>
-  </div>
-  <div class="hero-content">
-    <h1 class="hero-title">Find the meaning of<br><span class="gradient-text">any word, instantly</span></h1>
-    <p class="hero-sub">Definitions, examples, synonyms · Works offline · 10+ languages</p>
-    <div class="search-box" id="heroSearch">
-      <span class="search-icon">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="7"/><line x1="16.5" y1="16.5" x2="22" y2="22"/></svg>
-      </span>
-      <input type="text" id="heroInput" placeholder="Search a word..." autocomplete="off" spellcheck="false">
-      <button class="search-btn" id="heroBtn">Search</button>
-    </div>
-    <div class="suggestions" id="suggestions"></div>
-    <div class="hero-stats">
-      <span>📖 3000+ words offline</span>
-      <span>🌍 10+ languages</span>
-      <span>🔊 Pronunciation</span>
+<!-- SEARCH BAR (sticky) -->
+<div class="search-sticky">
+  <div class="search-row">
+    <div class="search-box" id="searchBox">
+      <svg class="sb-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="7"/><line x1="16.5" y1="16.5" x2="22" y2="22"/></svg>
+      <input id="inp" type="text" placeholder="Search in English..." autocomplete="off" spellcheck="false">
+      <button class="sb-x" id="sbX" onclick="clearAll()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="15"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
     </div>
   </div>
-</section>
-
-<!-- AD BANNER TOP -->
-<div class="ad-container" id="adBannerTop">
-  <div class="ad-label">Advertisement</div>
-  <div id="hms-banner-1" class="admob-banner"></div>
+  <!-- LANG BAR -->
+  <div class="lang-bar">
+    <button class="lb-btn lb-from" onclick="openLang('from')">
+      <span id="fFlag">🇬🇧</span>
+      <span id="fName">English</span>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="11"><polyline points="6 9 12 15 18 9"/></svg>
+    </button>
+    <button class="lb-swap" onclick="swapLangs()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" width="16"><path d="M7 16V4m0 0L3 8m4-4l4 4M17 8v12m0 0l4-4m-4 4l-4-4"/></svg>
+    </button>
+    <button class="lb-btn lb-to" onclick="openLang('to')">
+      <span id="tFlag">🇸🇦</span>
+      <span id="tName">Arabic</span>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="11"><polyline points="6 9 12 15 18 9"/></svg>
+    </button>
+  </div>
+  <!-- SUGGESTIONS -->
+  <div class="sugg-drop" id="suggDrop"></div>
 </div>
 
-<!-- TABLET LAYOUT WRAPPER -->
-<div class="tablet-grid">
+<!-- RESULT (shown after search) -->
+<div id="resultArea" style="display:none">
+  <div class="word-hero" id="wordHero"></div>
+  <div class="pron-row" id="pronRow"></div>
 
-<!-- MAIN CONTENT -->
-<div class="main-content">
-
-<!-- RESULTS -->
-<section class="results-section" id="resultsSection" style="display:none">
-  <div class="container">
-    <div id="resultsContent"></div>
+  <div class="sec-tabs" id="secTabs">
+    <button class="stab active" data-s="dict" onclick="showSection('dict')">Dictionary</button>
+    <button class="stab" data-s="trans" onclick="showSection('trans')">Translation</button>
+    <button class="stab" data-s="syn" onclick="showSection('syn')">Synonyms</button>
   </div>
-</section>
 
-<!-- WORD OF THE DAY -->
-<section class="wod-section" id="wodSection">
-  <div class="container">
-    <div class="section-label">✦ Word of the Day</div>
+  <div id="secDict" class="sec-content"></div>
+  <div id="secTrans" class="sec-content" style="display:none"></div>
+  <div id="secSyn" class="sec-content" style="display:none"></div>
+
+  <button class="back-home" onclick="goHome()">← Back to Home</button>
+</div>
+
+<!-- HOME -->
+<div id="homeArea">
+  <div class="home-block">
+    <div class="blk-hdr">
+      <span class="blk-title">Word of the Day</span>
+      <span class="blk-badge">TODAY</span>
+    </div>
     <div class="wod-card" id="wodCard">
-      <div class="wod-loading">Loading...</div>
+      <div class="spin-center"><div class="spinner"></div></div>
     </div>
   </div>
-</section>
 
-<!-- CATEGORIES -->
-<section class="categories-section">
-  <div class="container">
-    <div class="section-label">✦ Browse by Category</div>
-    <div class="categories-grid">
-      <div class="cat-card" data-word="ephemeral"><div class="cat-icon">📚</div><div class="cat-name">Literature</div><div class="cat-example">ephemeral</div></div>
-      <div class="cat-card" data-word="hypothesis"><div class="cat-icon">🔬</div><div class="cat-name">Science</div><div class="cat-example">hypothesis</div></div>
-      <div class="cat-card" data-word="algorithm"><div class="cat-icon">💻</div><div class="cat-name">Technology</div><div class="cat-example">algorithm</div></div>
-      <div class="cat-card" data-word="serendipity"><div class="cat-icon">✨</div><div class="cat-name">Beautiful</div><div class="cat-example">serendipity</div></div>
-      <div class="cat-card" data-word="democracy"><div class="cat-icon">🏛️</div><div class="cat-name">Politics</div><div class="cat-example">democracy</div></div>
-      <div class="cat-card" data-word="melancholy"><div class="cat-icon">🎭</div><div class="cat-name">Emotions</div><div class="cat-example">melancholy</div></div>
-      <div class="cat-card" data-word="resilience"><div class="cat-icon">💪</div><div class="cat-name">Character</div><div class="cat-example">resilience</div></div>
-      <div class="cat-card" data-word="vibrant"><div class="cat-icon">🎨</div><div class="cat-name">Descriptive</div><div class="cat-example">vibrant</div></div>
+  <div class="home-block">
+    <div class="blk-hdr"><span class="blk-title">Quick Access</span></div>
+    <div class="qa-grid">
+      <a href="favorites.html" class="qa-item qa-pink">
+        <svg viewBox="0 0 24 24" fill="currentColor" width="24"><path d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 0 0 .95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 0 0-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 0 0-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 0 0-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 0 0 .951-.69l1.519-4.674z"/></svg>
+        <span>Favorites</span>
+      </a>
+      <a href="quiz.html" class="qa-item qa-purple">
+        <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" width="24"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+        <span>Quiz</span>
+      </a>
+      <a href="translate.html" class="qa-item qa-blue">
+        <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" width="24"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10z"/></svg>
+        <span>Translate</span>
+      </a>
+      <div class="qa-item qa-teal" onclick="showOfflineLibrary()" style="cursor:pointer">
+        <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" width="24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+        <span>Library</span>
+      </div>
     </div>
   </div>
-</section>
 
-</div><!-- end main-content -->
-
-<!-- TABLET SIDEBAR -->
-<aside class="tablet-sidebar">
-  <div class="sidebar-section">
-    <div class="section-label">✦ Recent Searches</div>
-    <div class="recent-list sidebar-recent" id="recentList"></div>
+  <div class="home-block" id="recentBlk" style="display:none">
+    <div class="blk-hdr">
+      <span class="blk-title">Recent Searches</span>
+      <button class="blk-act" onclick="clearRecent()">Clear all</button>
+    </div>
+    <div class="chip-row" id="recentChips"></div>
   </div>
-  <div class="sidebar-section">
-    <div class="section-label">✦ Language Packs</div>
-    <div id="languagePacksGrid" class="packs-grid-sidebar"></div>
-  </div>
-  <div class="ad-container sidebar-ad" id="adBannerMiddle">
-    <div class="ad-label">Advertisement</div>
-    <div id="hms-banner-2" class="admob-banner"></div>
-  </div>
-</aside>
 
-</div><!-- end tablet-grid -->
-
-<!-- RECENT SEARCHES (mobile only) -->
-<section class="recent-section mobile-only" id="recentSection" style="display:none">
-  <div class="container">
-    <div class="section-label">✦ Recent Searches</div>
-    <div class="recent-list" id="recentListMobile"></div>
+  <div class="home-block">
+    <div class="blk-hdr"><span class="blk-title">Browse Topics</span></div>
+    <div class="topic-list">
+      <div class="topic-row" onclick="search('ephemeral')"><span class="tr-icon">📖</span><div class="tr-info"><b>Literature</b><span>ephemeral, eloquent...</span></div><span class="tr-chev">›</span></div>
+      <div class="topic-row" onclick="search('hypothesis')"><span class="tr-icon">🔬</span><div class="tr-info"><b>Science</b><span>hypothesis, catalyst...</span></div><span class="tr-chev">›</span></div>
+      <div class="topic-row" onclick="search('algorithm')"><span class="tr-icon">💻</span><div class="tr-info"><b>Technology</b><span>algorithm, binary...</span></div><span class="tr-chev">›</span></div>
+      <div class="topic-row" onclick="search('serendipity')"><span class="tr-icon">✨</span><div class="tr-info"><b>Beautiful Words</b><span>serendipity, luminous...</span></div><span class="tr-chev">›</span></div>
+      <div class="topic-row" onclick="search('democracy')"><span class="tr-icon">🏛️</span><div class="tr-info"><b>Politics</b><span>democracy, sovereign...</span></div><span class="tr-chev">›</span></div>
+    </div>
   </div>
-</section>
-
-<!-- LANGUAGE PACKS (mobile only) -->
-<section class="languages-section mobile-only">
-  <div class="container">
-    <div class="section-label">✦ Offline Language Packs</div>
-    <div id="languagePacksGridMobile" class="packs-grid"></div>
-  </div>
-</section>
-
-<!-- AD BANNER BOTTOM -->
-<div class="ad-container" id="adBannerBottom">
-  <div class="ad-label">Advertisement</div>
-  <div id="hms-banner-3" class="admob-banner"></div>
 </div>
 
-<!-- FOOTER -->
-<footer class="footer">
-  <div class="footer-inner">
-    <div class="footer-logo">
-      <svg viewBox="0 0 40 32" fill="none" width="32">
-        <rect x="2" y="24" width="36" height="4" rx="2" fill="#fff" opacity="0.5"/>
-        <path d="M20 4 L20 20" stroke="#fff" stroke-width="2" opacity="0.7"/>
-        <path d="M4 20 C4 20 20 16 36 20" stroke="#fff" stroke-width="2.5" fill="none" opacity="0.7"/>
-      </svg>
-      <span>Your Dictionary</span>
+<!-- LANG MODAL (also used for Library) -->
+<div class="modal-overlay" id="langModal" style="display:none" onclick="closeLang()">
+  <div class="modal-sheet" onclick="event.stopPropagation()">
+    <div class="modal-head">
+      <span>Select Language</span>
+      <button onclick="closeLang()">✕</button>
     </div>
-    <p class="footer-copy">© 2025 Your Dictionary · Offline · Multi-language</p>
-    <div class="footer-links">
-      <a href="about.html">About</a>
-      <a href="#">Privacy</a>
-      <a href="#">Terms</a>
-    </div>
+    <div id="langItems"></div>
   </div>
-</footer>
+</div>
 
+<!-- BOTTOM NAV -->
+<nav class="bottom-nav">
+  <a class="bn active" href="index.html"><svg viewBox="0 0 24 24" fill="currentColor" width="22"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg><span>Home</span></a>
+  <a class="bn" href="translate.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="22"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10z"/></svg><span>Translate</span></a>
+  <a class="bn" href="favorites.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="22"><path d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 0 0 .95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 0 0-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 0 0-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 0 0-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 0 0 .951-.69l1.519-4.674z"/></svg><span>Saved</span></a>
+  <a class="bn" href="quiz.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="22"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg><span>Quiz</span></a>
+  <a class="bn" href="about.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="22"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/></svg><span>More</span></a>
+</nav>
+
+<!-- Load offline dictionary FIRST, then app logic -->
 <script src="offline_dict.js"></script>
 <script src="app.js"></script>
-<script src="hms_ads.js"></script>
-
-<script>
-// Fix recent list for mobile vs sidebar
-document.addEventListener('DOMContentLoaded', function() {
-  const isMobile = window.innerWidth < 768;
-  const recentSection = document.getElementById('recentSection');
-  const mobileList = document.getElementById('recentListMobile');
-  const mainList = document.getElementById('recentList');
-
-  // Online status indicator
-  const statusEl = document.getElementById('onlineStatus');
-  function updateStatus() {
-    statusEl.textContent = navigator.onLine ? '🌐' : '📴';
-    statusEl.title = navigator.onLine ? 'Online' : 'Offline';
-  }
-  window.addEventListener('online', updateStatus);
-  window.addEventListener('offline', updateStatus);
-  updateStatus();
-
-  // Mobile recent searches
-  const recent = JSON.parse(localStorage.getItem('recentSearches') || '[]');
-  if (recent.length && mobileList) {
-    if (recentSection) recentSection.style.display = 'block';
-    mobileList.innerHTML = recent.map(w =>
-      `<button class="recent-tag" onclick="searchWord('${w}')">${w}</button>`
-    ).join('');
-  }
-
-  // Mobile language packs
-  const mobilePacksGrid = document.getElementById('languagePacksGridMobile');
-  if (mobilePacksGrid && typeof LANGUAGE_PACKS !== 'undefined') {
-    const downloadedPacks = JSON.parse(localStorage.getItem('downloadedPacks') || '["en"]');
-    mobilePacksGrid.innerHTML = Object.entries(LANGUAGE_PACKS).map(([code, pack]) => {
-      const isDownloaded = downloadedPacks.includes(code);
-      return `
-        <div class="pack-card ${isDownloaded ? 'downloaded' : ''}">
-          <div class="pack-flag">${pack.flag}</div>
-          <div class="pack-info">
-            <div class="pack-name">${pack.name}</div>
-            <div class="pack-size">${pack.size}</div>
-          </div>
-          <button class="pack-btn ${isDownloaded ? 'downloaded' : ''}" onclick="togglePack('${code}', this)">
-            ${isDownloaded ? '✓ Ready' : '⬇'}
-          </button>
-        </div>`;
-    }).join('');
-  }
-});
-</script>
 </body>
 </html>

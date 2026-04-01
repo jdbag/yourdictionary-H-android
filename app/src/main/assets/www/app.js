@@ -1,467 +1,460 @@
-// ============================================================
-// YOUR DICTIONARY - App Logic v2.0
-// Features: Offline DB, TTS Pronunciation, Tablet Support,
-//           Multi-language, U Dictionary inspired UX
-// ============================================================
+const DAPI='https://api.dictionaryapi.dev/api/v2/entries/en/';
+let recent=JSON.parse(localStorage.getItem('yd_r')||'[]');
+let favs=JSON.parse(localStorage.getItem('yd_f')||'[]');
+let from={code:'en',name:'English',flag:'🇬🇧'};
+let to={code:'ar',name:'Arabic',flag:'🇸🇦'};
+let langTarget='from';
+let lastWord='';
 
-const API_BASE = 'https://api.dictionaryapi.dev/api/v2/entries/en/';
-let recentSearches = JSON.parse(localStorage.getItem('recentSearches') || '[]');
-let favorites = JSON.parse(localStorage.getItem('favorites') || '[]');
-let currentLang = localStorage.getItem('currentLang') || 'en';
-let isOnline = navigator.onLine;
-let downloadedPacks = JSON.parse(localStorage.getItem('downloadedPacks') || '["en"]');
+const LANGS=[
+  {code:'en',name:'English',flag:'🇬🇧'},{code:'ar',name:'Arabic',flag:'🇸🇦'},
+  {code:'fr',name:'French',flag:'🇫🇷'},{code:'es',name:'Spanish',flag:'🇪🇸'},
+  {code:'de',name:'German',flag:'🇩🇪'},{code:'it',name:'Italian',flag:'🇮🇹'},
+  {code:'pt',name:'Portuguese',flag:'🇧🇷'},{code:'ru',name:'Russian',flag:'🇷🇺'},
+  {code:'zh',name:'Chinese',flag:'🇨🇳'},{code:'ja',name:'Japanese',flag:'🇯🇵'},
+  {code:'ko',name:'Korean',flag:'🇰🇷'},{code:'tr',name:'Turkish',flag:'🇹🇷'},
+  {code:'hi',name:'Hindi',flag:'🇮🇳'},{code:'nl',name:'Dutch',flag:'🇳🇱'},
+  {code:'pl',name:'Polish',flag:'🇵🇱'},{code:'sv',name:'Swedish',flag:'🇸🇪'},
+  {code:'fa',name:'Persian',flag:'🇮🇷'},{code:'id',name:'Indonesian',flag:'🇮🇩'},
+  {code:'vi',name:'Vietnamese',flag:'🇻🇳'},{code:'th',name:'Thai',flag:'🇹🇭'},
+];
 
-// ─── ONLINE STATUS ───────────────────────────────────────────
-window.addEventListener('online',  () => { isOnline = true;  showToast('🌐 Back online', 'success'); });
-window.addEventListener('offline', () => { isOnline = false; showToast('📴 Offline mode', 'info'); });
-
-// ─── SPEECH / PRONUNCIATION ──────────────────────────────────
-function speakWord(word, lang) {
-  lang = lang || 'en';
-
-  // 1. Android TTS bridge (most reliable in WebView)
-  if (window.AndroidBridge && window.AndroidBridge.speakText) {
-    const langMap = { en: 'en-US', ar: 'ar', fr: 'fr-FR', es: 'es-ES', de: 'de-DE', zh: 'zh-CN', ja: 'ja-JP', pt: 'pt-BR', ru: 'ru-RU', it: 'it-IT', ko: 'ko-KR' };
-    window.AndroidBridge.speakText(word, langMap[lang] || 'en-US');
-    return;
+// ── TTS BRIDGE ─────────────────────────────────────────────
+// Uses Android TTS (via AndroidBridge) → works on ALL devices including Huawei
+// Falls back to Web Speech API if bridge not available
+function speakNative(text, langCode) {
+  if (window.AndroidBridge && typeof window.AndroidBridge.speakWord === 'function') {
+    window.AndroidBridge.speakWord(text, langCode || 'en');
+    return true;
   }
+  return false;
+}
 
-  // 2. Web Speech API
+function speakWithFallback(text, langCode) {
+  if (speakNative(text, langCode)) return;
+  // Web Speech API fallback (works in browser/non-Android)
   if ('speechSynthesis' in window) {
     window.speechSynthesis.cancel();
-    const utter = new SpeechSynthesisUtterance(word);
-    const langMap = { en: 'en-US', ar: 'ar-SA', fr: 'fr-FR', es: 'es-ES', de: 'de-DE', zh: 'zh-CN', ja: 'ja-JP', pt: 'pt-BR', ru: 'ru-RU', it: 'it-IT', ko: 'ko-KR' };
-    utter.lang = langMap[lang] || 'en-US';
-    utter.rate = 0.85;
-    utter.pitch = 1.0;
-    utter.volume = 1.0;
-
-    const speak = () => {
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = langCode || 'en';
+    // Try to load voices and speak
+    const trySpeak = () => {
       const voices = window.speechSynthesis.getVoices();
-      const match = voices.find(v => v.lang.startsWith(utter.lang.split('-')[0]));
-      if (match) utter.voice = match;
-      window.speechSynthesis.speak(utter);
+      if (voices.length > 0) {
+        const v = voices.find(x => x.lang.startsWith(langCode || 'en')) || voices[0];
+        u.voice = v;
+      }
+      window.speechSynthesis.speak(u);
     };
-
-    if (window.speechSynthesis.getVoices().length > 0) {
-      speak();
+    if (window.speechSynthesis.getVoices().length === 0) {
+      window.speechSynthesis.onvoiceschanged = trySpeak;
+      window.speechSynthesis.speak(u); // also try directly
     } else {
-      window.speechSynthesis.onvoiceschanged = speak;
-      setTimeout(speak, 300);
+      trySpeak();
     }
-    return;
-  }
-
-  // 3. Audio URL fallback
-  if (window._lastAudioUrl) {
-    new Audio(window._lastAudioUrl).play().catch(() => showToast('Audio unavailable', 'error'));
   }
 }
 
 function playAudio(url) {
-  window._lastAudioUrl = url;
-  const audio = new Audio(url);
-  audio.play().catch(() => {
-    const word = document.querySelector('.result-word')?.textContent;
-    if (word) speakWord(word, 'en');
-  });
-}
-
-// ─── SEARCH ─────────────────────────────────────────────────
-async function searchWord(word) {
-  if (!word.trim()) return;
-  word = word.trim();
-  const wordLower = word.toLowerCase();
-
-  const resultsSection = document.getElementById('resultsSection');
-  const resultsContent = document.getElementById('resultsContent');
-  const wodSection = document.getElementById('wodSection');
-  const categoriesSection = document.querySelector('.categories-section');
-
-  if (!resultsSection) return;
-
-  resultsSection.style.display = 'block';
-  resultsContent.innerHTML = '<div class="loading-spinner"><div class="spinner"></div><p>Searching...</p></div>';
-  if (wodSection) wodSection.style.display = 'none';
-  if (categoriesSection) categoriesSection.style.display = 'none';
-
-  // 1. Offline DB first
-  if (typeof searchOffline === 'function') {
-    const offlineResult = searchOffline(wordLower);
-    if (offlineResult.found) {
-      renderOfflineResults(offlineResult);
-      saveRecent(wordLower);
-      return;
-    }
-
-    // 2. Online API
-    if (isOnline) {
-      try {
-        const res = await fetch(API_BASE + encodeURIComponent(wordLower));
-        if (!res.ok) throw new Error('Not found');
-        const data = await res.json();
-        renderResults(data, wordLower);
-        saveRecent(wordLower);
-        return;
-      } catch {}
-    }
-
-    // 3. Not found
-    const suggestions = offlineResult.suggestions || [];
-    resultsContent.innerHTML = `
-      <div class="error-card">
-        <div class="error-icon">🔍</div>
-        <h3>Word not found</h3>
-        <p>We couldn't find "<strong>${word}</strong>"${!isOnline ? ' (offline mode)' : ''}.</p>
-        ${suggestions.length ? `
-          <div class="suggestion-section">
-            <p class="suggestion-title">Did you mean?</p>
-            <div class="suggestion-chips">
-              ${suggestions.map(s => `<button class="chip" onclick="searchWord('${s}')">${s}</button>`).join('')}
-            </div>
-          </div>` : ''}
-        <button class="btn-secondary" onclick="clearResults()">← Go Back</button>
-      </div>`;
-  }
-}
-
-// ─── RENDER OFFLINE ──────────────────────────────────────────
-function renderOfflineResults(result) {
-  const { word, data, type, langName } = result;
-  const isFav = favorites.includes(word);
-
-  let html = `
-    <div class="result-header">
-      <div class="result-word-info">
-        <h2 class="result-word">${word}</h2>
-        ${data.phonetic ? `<span class="phonetic">${data.phonetic}</span>` : ''}
-        <button class="audio-btn" onclick="speakWord('${word.replace(/'/g,"\\'")}', '${type}')" title="Pronounce">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
-            <path d="M19.07 4.93a10 10 0 0 1 0 14.14"/>
-            <path d="M15.54 8.46a5 5 0 0 1 0 7.07"/>
-          </svg>
-        </button>
-        <span class="offline-badge">📴 Offline</span>
-        ${type !== 'en' ? `<span class="lang-badge">${langName || type.toUpperCase()}</span>` : ''}
-      </div>
-      <button class="fav-btn ${isFav ? 'active' : ''}" onclick="toggleFav('${word}', this)">
-        <svg viewBox="0 0 24 24" fill="${isFav ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2">
-          <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
-        </svg>
-        ${isFav ? 'Saved' : 'Save'}
-      </button>
-    </div>
-    <div class="meaning-block">
-      <div class="pos-badge">${data.pos}</div>
-      <ol class="definitions-list">
-        ${data.defs.map(def => `<li><p class="def-text">${def}</p></li>`).join('')}
-      </ol>
-      ${data.example ? `<p class="def-example">"${data.example}"</p>` : ''}
-      ${data.synonyms?.length ? `
-        <div class="word-tags">
-          <span class="tag-label">Synonyms:</span>
-          ${data.synonyms.map(s => `<span class="word-tag" onclick="searchWord('${s}')">${s}</span>`).join('')}
-        </div>` : ''}
-      ${data.antonyms?.length ? `
-        <div class="word-tags">
-          <span class="tag-label">Antonyms:</span>
-          ${data.antonyms.map(a => `<span class="word-tag antonym" onclick="searchWord('${a}')">${a}</span>`).join('')}
-        </div>` : ''}
-    </div>
-    <button class="btn-secondary back-btn" onclick="clearResults()">← Back to Home</button>`;
-
-  document.getElementById('resultsContent').innerHTML = html;
-  window.scrollTo(0, 0);
-}
-
-// ─── RENDER ONLINE ────────────────────────────────────────────
-function renderResults(data, word) {
-  const resultsContent = document.getElementById('resultsContent');
-  const entry = data[0];
-  const isFav = favorites.includes(word);
-  const audioObj = entry.phonetics?.find(p => p.audio);
-  if (audioObj) window._lastAudioUrl = audioObj.audio;
-
-  let html = `
-    <div class="result-header">
-      <div class="result-word-info">
-        <h2 class="result-word">${entry.word}</h2>
-        ${entry.phonetic ? `<span class="phonetic">${entry.phonetic}</span>` : ''}
-        <button class="audio-btn" onclick="speakWord('${entry.word.replace(/'/g,"\\'")}', 'en')" title="Pronounce">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
-            <path d="M19.07 4.93a10 10 0 0 1 0 14.14"/>
-            <path d="M15.54 8.46a5 5 0 0 1 0 7.07"/>
-          </svg>
-        </button>
-        <span class="online-badge">🌐 Online</span>
-      </div>
-      <button class="fav-btn ${isFav ? 'active' : ''}" onclick="toggleFav('${word}', this)">
-        <svg viewBox="0 0 24 24" fill="${isFav ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2">
-          <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
-        </svg>
-        ${isFav ? 'Saved' : 'Save'}
-      </button>
-    </div>`;
-
-  entry.meanings.forEach(meaning => {
-    html += `
-      <div class="meaning-block">
-        <div class="pos-badge">${meaning.partOfSpeech}</div>
-        <ol class="definitions-list">`;
-    meaning.definitions.slice(0, 4).forEach(def => {
-      html += `<li>
-        <p class="def-text">${def.definition}</p>
-        ${def.example ? `<p class="def-example">"${def.example}"</p>` : ''}
-      </li>`;
-    });
-    html += `</ol>`;
-    if (meaning.synonyms?.length) {
-      html += `<div class="word-tags"><span class="tag-label">Synonyms:</span>
-        ${meaning.synonyms.slice(0, 6).map(s => `<span class="word-tag" onclick="searchWord('${s}')">${s}</span>`).join('')}
-      </div>`;
-    }
-    if (meaning.antonyms?.length) {
-      html += `<div class="word-tags"><span class="tag-label">Antonyms:</span>
-        ${meaning.antonyms.slice(0, 6).map(a => `<span class="word-tag antonym" onclick="searchWord('${a}')">${a}</span>`).join('')}
-      </div>`;
-    }
-    html += `</div>`;
-  });
-
-  html += `<button class="btn-secondary back-btn" onclick="clearResults()">← Back to Home</button>`;
-  document.getElementById('resultsContent').innerHTML = html;
-  window.scrollTo(0, 0);
-}
-
-function clearResults() {
-  const r = document.getElementById('resultsSection');
-  const w = document.getElementById('wodSection');
-  const c = document.querySelector('.categories-section');
-  if (r) r.style.display = 'none';
-  if (w) w.style.display = 'block';
-  if (c) c.style.display = 'block';
-}
-
-// ─── FAVORITES ───────────────────────────────────────────────
-function toggleFav(word, btn) {
-  const idx = favorites.indexOf(word);
-  if (idx === -1) {
-    favorites.push(word);
-    btn.classList.add('active');
-    btn.querySelector('svg').setAttribute('fill', 'currentColor');
-    btn.lastChild.textContent = ' Saved';
-    showToast('Added to favorites', 'success');
-  } else {
-    favorites.splice(idx, 1);
-    btn.classList.remove('active');
-    btn.querySelector('svg').setAttribute('fill', 'none');
-    btn.lastChild.textContent = ' Save';
-    showToast('Removed from favorites', 'info');
-  }
-  localStorage.setItem('favorites', JSON.stringify(favorites));
-}
-
-// ─── RECENT ──────────────────────────────────────────────────
-function saveRecent(word) {
-  recentSearches = recentSearches.filter(w => w !== word);
-  recentSearches.unshift(word);
-  recentSearches = recentSearches.slice(0, 10);
-  localStorage.setItem('recentSearches', JSON.stringify(recentSearches));
-  renderRecent();
-}
-
-function renderRecent() {
-  const section = document.getElementById('recentSection');
-  const list = document.getElementById('recentList');
-  if (!section || !list) return;
-  if (recentSearches.length === 0) { section.style.display = 'none'; return; }
-  section.style.display = 'block';
-  list.innerHTML = recentSearches.map(w =>
-    `<button class="recent-tag" onclick="searchWord('${w}')">${w}</button>`
-  ).join('');
-}
-
-// ─── WORD OF THE DAY ─────────────────────────────────────────
-async function loadWordOfDay() {
-  const card = document.getElementById('wodCard');
-  if (!card) return;
-
-  const word = typeof getWordOfDay === 'function' ? getWordOfDay() : 'serendipity';
-
-  if (typeof searchOffline === 'function') {
-    const offlineResult = searchOffline(word);
-    if (offlineResult.found) {
-      const { data } = offlineResult;
-      card.innerHTML = `
-        <div class="wod-inner">
-          <div class="wod-word">${word}</div>
-          ${data.phonetic ? `<div class="wod-phonetic">${data.phonetic}</div>` : ''}
-          <div class="wod-pos">${data.pos}</div>
-          <p class="wod-def">${data.defs[0]}</p>
-          ${data.example ? `<p class="wod-example">"${data.example}"</p>` : ''}
-          <div class="wod-actions">
-            <button class="btn-primary" onclick="searchWord('${word}')">Explore Word →</button>
-            <button class="audio-btn-wod" onclick="speakWord('${word}', 'en')">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="22" height="22">
-                <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
-                <path d="M15.54 8.46a5 5 0 0 1 0 7.07"/>
-              </svg>
-            </button>
-          </div>
-        </div>`;
-      return;
-    }
-  }
-
-  if (!navigator.onLine) { card.innerHTML = `<p style="padding:20px;color:#64748b">Connect to internet for Word of the Day</p>`; return; }
-
+  if (!url) return;
+  // Fix protocol-relative URLs
+  if (url.startsWith('//')) url = 'https:' + url;
   try {
-    const res = await fetch(API_BASE + word);
-    const data = await res.json();
-    const entry = data[0];
-    const def = entry.meanings[0].definitions[0];
-    card.innerHTML = `
-      <div class="wod-inner">
-        <div class="wod-word">${entry.word}</div>
-        ${entry.phonetic ? `<div class="wod-phonetic">${entry.phonetic}</div>` : ''}
-        <div class="wod-pos">${entry.meanings[0].partOfSpeech}</div>
-        <p class="wod-def">${def.definition}</p>
-        ${def.example ? `<p class="wod-example">"${def.example}"</p>` : ''}
-        <div class="wod-actions">
-          <button class="btn-primary" onclick="searchWord('${entry.word}')">Explore Word →</button>
-          <button class="audio-btn-wod" onclick="speakWord('${entry.word}', 'en')">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="22" height="22">
-              <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
-              <path d="M15.54 8.46a5 5 0 0 1 0 7.07"/>
-            </svg>
-          </button>
-        </div>
-      </div>`;
-  } catch {
-    card.innerHTML = `<p style="padding:20px;color:#64748b">Could not load word of the day.</p>`;
+    const a = new Audio(url);
+    a.onerror = () => {
+      // If audio fails, fall back to TTS
+      if (lastWord) speakWithFallback(lastWord, 'en');
+    };
+    a.play().catch(() => {
+      if (lastWord) speakWithFallback(lastWord, 'en');
+    });
+  } catch(e) {
+    if (lastWord) speakWithFallback(lastWord, 'en');
   }
 }
 
-// ─── LANGUAGE PACKS ──────────────────────────────────────────
-function renderLanguagePacks() {
-  const container = document.getElementById('languagePacksGrid');
-  if (!container || typeof LANGUAGE_PACKS === 'undefined') return;
+function speakText() {
+  const t = document.getElementById('tcTxt')?.textContent;
+  if (t) speakWithFallback(t, to.code);
+}
 
-  container.innerHTML = Object.entries(LANGUAGE_PACKS).map(([code, pack]) => {
-    const isDownloaded = downloadedPacks.includes(code);
-    return `
-      <div class="pack-card ${isDownloaded ? 'downloaded' : ''}">
-        <div class="pack-flag">${pack.flag}</div>
-        <div class="pack-info">
-          <div class="pack-name">${pack.name}</div>
-          <div class="pack-native">${pack.nativeName}</div>
-          <div class="pack-size">${pack.size}</div>
-        </div>
-        <button class="pack-btn ${isDownloaded ? 'downloaded' : ''}" onclick="togglePack('${code}', this)">
-          ${isDownloaded ? '✓ Ready' : '⬇ Download'}
-        </button>
+// ── THEME ──────────────────────────────────────────────────
+function initTheme(){
+  const t=localStorage.getItem('yd_t')||'dark';
+  document.body.className=t;
+  const b=document.getElementById('themeBtn');
+  if(b)b.textContent=t==='dark'?'☀️':'🌙';
+}
+function toggleTheme(){
+  const t=document.body.className==='dark'?'light':'dark';
+  document.body.className=t;localStorage.setItem('yd_t',t);
+  const b=document.getElementById('themeBtn');
+  if(b)b.textContent=t==='dark'?'☀️':'🌙';
+}
+
+// ── LANG MODAL ─────────────────────────────────────────────
+function openLang(target){
+  langTarget=target;
+  const cur=target==='from'?from.code:to.code;
+  document.getElementById('langItems').innerHTML=LANGS.map(l=>`
+    <div class="lang-row-item ${l.code===cur?'sel':''}" onclick="pickLang('${l.code}','${l.name}','${l.flag}')">
+      <span class="lri-flag">${l.flag}</span>
+      <span>${l.name}</span>
+      ${l.code===cur?'<span class="lri-check">✓</span>':''}
+    </div>`).join('');
+  document.getElementById('langModal').style.display='flex';
+}
+function closeLang(){document.getElementById('langModal').style.display='none';}
+function pickLang(code,name,flag){
+  if(langTarget==='from'){from={code,name,flag};_set('fFlag',flag);_set('fName',name);}
+  else{to={code,name,flag};_set('tFlag',flag);_set('tName',name);}
+  closeLang();
+  if(lastWord){translate(lastWord);}
+}
+function swapLangs(){
+  const tmp=from;from=to;to=tmp;
+  _set('fFlag',from.flag);_set('fName',from.name);
+  _set('tFlag',to.flag);_set('tName',to.name);
+  if(lastWord)translate(lastWord);
+}
+function _set(id,txt){const e=document.getElementById(id);if(e)e.textContent=txt;}
+
+// ── OFFLINE FIRST LOOKUP ───────────────────────────────────
+async function search(word){
+  const inp=document.getElementById('inp');
+  if(word){if(inp)inp.value=word;}
+  else{word=inp?.value.trim();}
+  if(!word)return;
+  word=word.toLowerCase().trim();
+  lastWord=word;
+  hideSugg();showResult();
+
+  _html('wordHero','<div style="padding:16px"><div style="width:160px;height:32px;background:var(--BD);border-radius:8px;animation:pulse 1.5s infinite"></div></div>');
+  _html('pronRow','<div style="height:44px"></div>');
+  _html('secDict','<div class="spin-center" style="padding:40px"><div class="spinner"></div></div>');
+  _html('secTrans','<div class="spin-center" style="padding:32px"><div class="spinner"></div></div>');
+  _html('secSyn','<div class="spin-center" style="padding:32px"><div class="spinner"></div></div>');
+
+  // Try offline first
+  const offlineData = (typeof offlineLookup === 'function') ? offlineLookup(word) : null;
+  if (offlineData) {
+    buildWordHeroOffline(offlineData, word);
+    buildPronRowOffline(offlineData, word);
+    buildDictSectionOffline(offlineData, word);
+    buildSynSectionOffline(offlineData);
+    saveRecent(word);
+    translate(word);
+    // Show offline badge
+    const badge = document.getElementById('offlineBadge');
+    if (badge) badge.style.display = 'inline-flex';
+    return;
+  }
+
+  // Hide offline badge if online
+  const badge = document.getElementById('offlineBadge');
+  if (badge) badge.style.display = 'none';
+
+  // Online fallback
+  try{
+    const r=await fetch(DAPI+encodeURIComponent(word));
+    if(!r.ok)throw 0;
+    const data=await r.json();
+    buildWordHero(data,word);
+    buildPronRow(data);
+    buildDictSection(data);
+    buildSynSection(data);
+    saveRecent(word);
+  }catch{
+    _html('wordHero','');
+    _html('pronRow','');
+    _html('secDict',`<div class="err-box"><div class="err-icon">🔍</div><h3>Word not found</h3><p>No results for "<strong>${word}</strong>"</p><p style="font-size:12px;opacity:.6">Try the offline library — ${typeof offlineWordList==='function'?offlineWordList().length:0}+ words available</p><button class="btn-grad" onclick="goHome()">← Home</button></div>`);
+    _html('secTrans','');_html('secSyn','');
+  }
+  translate(word);
+}
+
+// ── OFFLINE BUILDERS ───────────────────────────────────────
+function buildWordHeroOffline(data, word){
+  const isFav=favs.includes(word);
+  _html('wordHero',`
+    <div class="wh-top">
+      <div class="wh-word">${word}</div>
+      <div class="wh-acts">
+        <button class="wh-act" onclick="speakWithFallback('${word}','en')" title="Pronounce">🔊</button>
+        <button class="wh-act ${isFav?'fav-on':''}" id="favBtn" onclick="toggleFav('${word}',this)">${isFav?'❤️':'🤍'}</button>
+      </div>
+    </div>`);
+}
+
+function buildPronRowOffline(data, word){
+  let h='';
+  if(data.phonetic){
+    h=`<div class="pron-pill" onclick="speakWithFallback('${word}','en')">
+      <span class="pp-flag">🇬🇧</span>
+      <span class="pp-lbl">UK</span>
+      <span class="pp-ipa">${data.phonetic}</span>
+      <span class="pp-play">▶</span>
+    </div>
+    <div class="pron-pill" onclick="speakWithFallback('${word}','en-US')">
+      <span class="pp-flag">🇺🇸</span>
+      <span class="pp-lbl">US</span>
+      <span class="pp-ipa">${data.phonetic}</span>
+      <span class="pp-play">▶</span>
+    </div>`;
+  }
+  _html('pronRow', h || '<div style="height:12px"></div>');
+}
+
+function buildDictSectionOffline(data, word){
+  let h=`<div class="m-card">
+    <div class="m-pos-row"><div class="m-pos">${data.pos}</div><div class="m-pos-line"></div></div>`;
+  data.defs.forEach((d,i)=>{
+    h+=`<div class="def-item">
+      <div class="def-top"><div class="def-num">${i+1}</div><div class="def-txt">${d.d}</div></div>
+      ${d.e?`<div class="def-ex">${d.e}</div>`:''}
+    </div>`;
+  });
+  h+='</div>';
+  _html('secDict',h);
+}
+
+function buildSynSectionOffline(data){
+  let h='';
+  if(data.syns&&data.syns.length){
+    h+=`<div class="syn-card"><div class="syn-label">Synonyms</div><div class="syn-chips">${data.syns.map(s=>`<span class="syn-chip" onclick="search('${s}')">${s}</span>`).join('')}</div></div>`;
+  }
+  if(data.ants&&data.ants.length){
+    h+=`<div class="syn-card"><div class="syn-label">Antonyms</div><div class="syn-chips">${data.ants.map(a=>`<span class="syn-chip ant-chip" onclick="search('${a}')">${a}</span>`).join('')}</div></div>`;
+  }
+  if(!h) h='<div class="err-box" style="padding:24px"><div style="font-size:32px;margin-bottom:8px">🔤</div><p>No synonyms found for this word.</p></div>';
+  _html('secSyn',h);
+}
+
+// ── ONLINE BUILDERS ────────────────────────────────────────
+function buildWordHero(data,word){
+  const e=data[0];const isFav=favs.includes(word);
+  const phs=e.phonetics?.filter(p=>p.audio)||[];
+  _html('wordHero',`
+    <div class="wh-top">
+      <div class="wh-word">${e.word}</div>
+      <div class="wh-acts">
+        ${phs.length?`<button class="wh-act" onclick="playAudio('${phs[0].audio}')">🔊</button>`:
+        `<button class="wh-act" onclick="speakWithFallback('${word}','en')">🔊</button>`}
+        <button class="wh-act ${isFav?'fav-on':''}" id="favBtn" onclick="toggleFav('${word}',this)">${isFav?'❤️':'🤍'}</button>
+      </div>
+    </div>`);
+}
+
+function buildPronRow(data){
+  const e=data[0];
+  const phs=e.phonetics?.filter(p=>p.text||p.audio)||[];
+  const uk=phs.find(p=>p.audio?.includes('-uk'))||phs[0];
+  const us=phs.find(p=>p.audio?.includes('-us'))||phs[1];
+  let h='';
+  if(uk) h+=`<div class="pron-pill" onclick="playAudio('${uk.audio||''}')"><span class="pp-flag">🇬🇧</span><span class="pp-lbl">UK</span><span class="pp-ipa">${uk.text||''}</span><span class="pp-play">▶</span></div>`;
+  if(us&&us!==uk) h+=`<div class="pron-pill" onclick="playAudio('${us.audio||''}')"><span class="pp-flag">🇺🇸</span><span class="pp-lbl">US</span><span class="pp-ipa">${us.text||''}</span><span class="pp-play">▶</span></div>`;
+  if(!h&&lastWord) h=`<div class="pron-pill" onclick="speakWithFallback('${lastWord}','en')"><span class="pp-flag">🔊</span><span class="pp-lbl">TTS</span><span class="pp-ipa">tap to hear</span><span class="pp-play">▶</span></div>`;
+  _html('pronRow',h||'<div style="height:12px"></div>');
+}
+
+function buildDictSection(data){
+  const e=data[0];let h='';
+  e.meanings.forEach(m=>{
+    h+=`<div class="m-card">
+      <div class="m-pos-row"><div class="m-pos">${m.partOfSpeech}</div><div class="m-pos-line"></div></div>`;
+    m.definitions.slice(0,5).forEach((d,i)=>{
+      h+=`<div class="def-item">
+        <div class="def-top"><div class="def-num">${i+1}</div><div class="def-txt">${d.definition}</div></div>
+        ${d.example?`<div class="def-ex">${d.example}</div>`:''}
       </div>`;
-  }).join('');
+    });
+    h+=`</div>`;
+  });
+  _html('secDict',h);
 }
 
-function togglePack(code, btn) {
-  if (downloadedPacks.includes(code)) return;
-  btn.textContent = '⏳ Installing...';
-  btn.disabled = true;
-  setTimeout(() => {
-    downloadedPacks.push(code);
-    localStorage.setItem('downloadedPacks', JSON.stringify(downloadedPacks));
-    btn.textContent = '✓ Ready';
-    btn.classList.add('downloaded');
-    btn.closest('.pack-card').classList.add('downloaded');
-    showToast(`${LANGUAGE_PACKS[code].name} language pack installed!`, 'success');
-  }, 1500);
-}
-
-// ─── SEARCH SUGGESTIONS ──────────────────────────────────────
-function setupSearch() {
-  const input = document.getElementById('heroInput');
-  const btn = document.getElementById('heroBtn');
-  const suggestions = document.getElementById('suggestions');
-
-  if (!input) return;
-
-  btn?.addEventListener('click', () => { searchWord(input.value); if(window.onSearch) onSearch(); });
-  input.addEventListener('keydown', e => {
-    if (e.key === 'Enter') { searchWord(input.value); if(window.onSearch) onSearch(); }
+function buildSynSection(data){
+  const e=data[0];let syns=[],ants=[];
+  e.meanings.forEach(m=>{
+    syns=[...syns,...(m.synonyms||[])];
+    ants=[...ants,...(m.antonyms||[])];
   });
-
-  input.addEventListener('input', () => {
-    const val = input.value.trim();
-    if (!suggestions) return;
-    if (val.length < 2) { suggestions.innerHTML = ''; suggestions.style.display = 'none'; return; }
-
-    const offlineSugg = typeof getOfflineSuggestions === 'function' ? getOfflineSuggestions(val) : [];
-    const recentMatches = recentSearches.filter(w => w.startsWith(val.toLowerCase())).slice(0, 3);
-    const allSugg = [...new Set([...recentMatches, ...offlineSugg])].slice(0, 6);
-
-    if (allSugg.length) {
-      suggestions.style.display = 'block';
-      suggestions.innerHTML = allSugg.map(w =>
-        `<div class="suggestion-item" onclick="searchWord('${w}')">
-          ${recentMatches.includes(w) ? '🕐 ' : '📖 '}<span>${w}</span>
-        </div>`
-      ).join('');
-    } else {
-      suggestions.innerHTML = '';
-      suggestions.style.display = 'none';
-    }
-  });
-
-  document.addEventListener('click', e => {
-    if (suggestions && !input.contains(e.target)) suggestions.style.display = 'none';
-  });
-}
-
-// ─── MOBILE NAV ──────────────────────────────────────────────
-function setupMobileNav() {
-  const btn = document.getElementById('menuBtn');
-  const nav = document.getElementById('mobileNav');
-  if (!btn || !nav) return;
-  btn.addEventListener('click', () => nav.classList.toggle('open'));
-  document.addEventListener('click', e => {
-    if (!btn.contains(e.target) && !nav.contains(e.target)) nav.classList.remove('open');
-  });
-}
-
-// ─── CATEGORIES ──────────────────────────────────────────────
-function setupCategories() {
-  document.querySelectorAll('.cat-card').forEach(card => {
-    card.addEventListener('click', () => {
-      const word = card.dataset.word;
-      if (word) searchWord(word);
+  e.meanings.forEach(m=>{
+    m.definitions.forEach(d=>{
+      syns=[...syns,...(d.synonyms||[])];
+      ants=[...ants,...(d.antonyms||[])];
     });
   });
+  syns=[...new Set(syns)].slice(0,16);
+  ants=[...new Set(ants)].slice(0,16);
+  let h='';
+  if(syns.length) h+=`<div class="syn-card"><div class="syn-label">Synonyms</div><div class="syn-chips">${syns.map(s=>`<span class="syn-chip" onclick="search('${s}')">${s}</span>`).join('')}</div></div>`;
+  if(ants.length) h+=`<div class="syn-card"><div class="syn-label">Antonyms</div><div class="syn-chips">${ants.map(a=>`<span class="syn-chip ant-chip" onclick="search('${a}')">${a}</span>`).join('')}</div></div>`;
+  if(!syns.length&&!ants.length) h='<div class="err-box" style="padding:24px"><div style="font-size:32px;margin-bottom:8px">🔤</div><p>No synonyms found for this word.</p></div>';
+  _html('secSyn',h);
 }
 
-// ─── TOAST ───────────────────────────────────────────────────
-function showToast(message, type) {
-  const existing = document.getElementById('toast');
-  if (existing) existing.remove();
-  const toast = document.createElement('div');
-  toast.id = 'toast';
-  toast.className = `toast toast-${type || 'info'}`;
-  toast.textContent = message;
-  document.body.appendChild(toast);
-  setTimeout(() => toast.classList.add('visible'), 10);
-  setTimeout(() => { toast.classList.remove('visible'); setTimeout(() => toast.remove(), 300); }, 2500);
+// ── TRANSLATION ────────────────────────────────────────────
+async function translate(word){
+  const tp=document.getElementById('secTrans');if(!tp)return;
+  tp.innerHTML='<div class="spin-center" style="padding:32px"><div class="spinner"></div></div>';
+  try{
+    const r=await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(word)}&langpair=${from.code}|${to.code}`);
+    const d=await r.json();
+    const result=d.responseData.translatedText;
+    tp.innerHTML=`<div class="trans-card">
+      <div class="tc-lang"><span class="tc-flag">${to.flag}</span><span class="tc-name">${to.name}</span></div>
+      <div class="tc-text" id="tcTxt">${result}</div>
+      <div class="tc-acts">
+        <button class="tc-btn" onclick="navigator.clipboard?.writeText(document.getElementById('tcTxt').textContent)">📋 Copy</button>
+        <button class="tc-btn" onclick="speakText()">🔊 Listen</button>
+        <button class="tc-btn" onclick="openLang('to')">🌐 Change</button>
+      </div>
+    </div>`;
+  }catch{
+    tp.innerHTML='<div class="err-box"><div class="err-icon">🌐</div><h3>Translation failed</h3><p>Check internet connection</p></div>';
+  }
 }
 
-// ─── INIT ─────────────────────────────────────────────────────
-document.addEventListener('DOMContentLoaded', () => {
-  setupSearch();
-  setupMobileNav();
-  setupCategories();
-  renderRecent();
-  loadWordOfDay();
-  renderLanguagePacks();
-  if ('speechSynthesis' in window) window.speechSynthesis.getVoices();
-  if (!navigator.onLine) showToast('Offline mode - using local dictionary', 'info');
+// ── TABS ──────────────────────────────────────────────────
+function showSection(s){
+  ['dict','trans','syn'].forEach(x=>{
+    document.getElementById('sec'+x.charAt(0).toUpperCase()+x.slice(1)).style.display=x===s?'block':'none';
+  });
+  document.querySelectorAll('.stab').forEach(t=>t.classList.toggle('active',t.dataset.s===s));
+}
+
+function showResult(){
+  document.getElementById('resultArea').style.display='block';
+  document.getElementById('homeArea').style.display='none';
+  showSection('dict');
+}
+function goHome(){
+  document.getElementById('resultArea').style.display='none';
+  document.getElementById('homeArea').style.display='block';
+  const inp=document.getElementById('inp');if(inp)inp.value='';
+  updateClear();hideSugg();lastWord='';
+  const badge = document.getElementById('offlineBadge');
+  if (badge) badge.style.display = 'none';
+}
+function clearAll(){const inp=document.getElementById('inp');if(inp)inp.value='';updateClear();hideSugg();if(lastWord)goHome();}
+function updateClear(){
+  const inp=document.getElementById('inp'),x=document.getElementById('sbX');
+  if(x)x.style.display=inp?.value.trim()?'flex':'none';
+}
+
+// ── FAVORITES ─────────────────────────────────────────────
+function toggleFav(word,btn){
+  const i=favs.indexOf(word);
+  if(i===-1){favs.push(word);btn.innerHTML='❤️';btn.classList.add('fav-on');}
+  else{favs.splice(i,1);btn.innerHTML='🤍';btn.classList.remove('fav-on');}
+  localStorage.setItem('yd_f',JSON.stringify(favs));
+}
+
+// ── RECENT ─────────────────────────────────────────────────
+function saveRecent(w){
+  recent=[w,...recent.filter(x=>x!==w)].slice(0,12);
+  localStorage.setItem('yd_r',JSON.stringify(recent));renderRecent();
+}
+function clearRecent(){recent=[];localStorage.setItem('yd_r','[]');renderRecent();}
+function renderRecent(){
+  const b=document.getElementById('recentBlk'),c=document.getElementById('recentChips');
+  if(!b||!c)return;
+  if(!recent.length){b.style.display='none';return;}
+  b.style.display='block';
+  c.innerHTML=recent.map(w=>`<button class="chip" onclick="search('${w}')">${w}</button>`).join('');
+}
+
+// ── SUGGESTIONS (offline-powered) ─────────────────────────
+function showSugg(val){
+  const box=document.getElementById('suggDrop');if(!box)return;
+  let m=recent.filter(w=>w.startsWith(val)).slice(0,3);
+  // Add offline suggestions
+  if(typeof offlineSuggest==='function'){
+    const offSugg=offlineSuggest(val,5).filter(w=>!m.includes(w));
+    m=[...m,...offSugg].slice(0,8);
+  }
+  if(m.length){
+    box.style.display='block';
+    box.innerHTML=m.map(w=>{
+      const isRecent=recent.includes(w);
+      return `<div class="sd-item" onclick="search('${w}')"><span class="sd-ic">${isRecent?'🕐':'📖'}</span>${w}</div>`;
+    }).join('');
+  }else hideSugg();
+}
+function hideSugg(){const b=document.getElementById('suggDrop');if(b){b.style.display='none';b.innerHTML='';}}
+
+// ── WOD ────────────────────────────────────────────────────
+const WODS=['ephemeral','serendipity','melancholy','resilience','eloquence','luminous','tenacious','labyrinth','solitude','whimsical','paradigm','catalyst','authentic','profound','vibrant'];
+async function loadWOD(){
+  const card=document.getElementById('wodCard');if(!card)return;
+  const word=WODS[new Date().getDate()%WODS.length];
+
+  // Try offline first
+  const off = (typeof offlineLookup==='function') ? offlineLookup(word) : null;
+  if (off) {
+    card.innerHTML=`<div class="wod-badge">📅 Word of the Day</div>
+      <div class="wod-word">${word}</div>
+      ${off.phonetic?`<div class="wod-ph">${off.phonetic}</div>`:''}
+      <div class="wod-pos">${off.pos}</div>
+      <div class="wod-def">${off.defs[0].d}</div>
+      ${off.defs[0].e?`<div class="wod-ex">${off.defs[0].e}</div>`:''}
+      <button class="wod-btn" onclick="search('${word}')">Explore word →</button>`;
+    return;
+  }
+  try{
+    const r=await fetch(DAPI+word);const d=await r.json();
+    const e=d[0];const def=e.meanings[0].definitions[0];
+    card.innerHTML=`<div class="wod-badge">📅 Word of the Day</div>
+      <div class="wod-word">${e.word}</div>
+      ${e.phonetic?`<div class="wod-ph">${e.phonetic}</div>`:''}
+      <div class="wod-pos">${e.meanings[0].partOfSpeech}</div>
+      <div class="wod-def">${def.definition}</div>
+      ${def.example?`<div class="wod-ex">${def.example}</div>`:''}
+      <button class="wod-btn" onclick="search('${e.word}')">Explore word →</button>`;
+  }catch{card.innerHTML='<div style="text-align:center;padding:16px;color:var(--T3)">Could not load today\'s word</div>';}
+}
+
+// ── OFFLINE WORD BROWSER ───────────────────────────────────
+function showOfflineLibrary(){
+  if(typeof offlineWordList!=='function')return;
+  const words=offlineWordList();
+  const modal=document.getElementById('langModal'); // reuse modal
+  const title=document.querySelector('.modal-head span');
+  const items=document.getElementById('langItems');
+  if(title) title.textContent=`Offline Library (${words.length} words)`;
+  items.innerHTML=`<div style="padding:8px 16px">
+    <input type="text" id="libSearch" placeholder="Filter words..." style="width:100%;padding:10px;border-radius:8px;border:1px solid var(--BD);background:var(--BG2);color:var(--T1);font-size:14px" oninput="filterLib(this.value)">
+  </div>
+  <div id="libList">${words.map(w=>`<div class="lang-row-item" onclick="closeLang();search('${w}')" style="cursor:pointer">
+    <span class="lri-flag">📖</span><span>${w}</span>
+  </div>`).join('')}</div>`;
+  modal.style.display='flex';
+}
+
+function filterLib(val){
+  const list=document.getElementById('libList');if(!list)return;
+  const filtered=(typeof offlineWordList==='function'?offlineWordList():[]).filter(w=>w.includes(val.toLowerCase()));
+  list.innerHTML=filtered.slice(0,200).map(w=>`<div class="lang-row-item" onclick="closeLang();search('${w}')" style="cursor:pointer">
+    <span class="lri-flag">📖</span><span>${w}</span>
+  </div>`).join('');
+}
+
+function _html(id,h){const e=document.getElementById(id);if(e)e.innerHTML=h;}
+
+// ── INIT ───────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded',()=>{
+  initTheme();renderRecent();loadWOD();
+  const inp=document.getElementById('inp');
+  if(inp){
+    inp.addEventListener('keydown',e=>{if(e.key==='Enter')search();});
+    inp.addEventListener('input',()=>{
+      updateClear();
+      const v=inp.value.trim();
+      if(v.length>=2)showSugg(v);else hideSugg();
+    });
+    document.addEventListener('click',e=>{if(!inp.contains(e.target))hideSugg();});
+  }
+  const p=new URLSearchParams(window.location.search);
+  if(p.get('word'))search(p.get('word'));
 });
