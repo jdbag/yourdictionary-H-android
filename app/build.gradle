@@ -3,12 +3,6 @@ plugins {
     id 'com.huawei.agconnect'
 }
 
-repositories {
-    google()
-    mavenCentral()
-    maven { url 'https://developer.huawei.com/repo/' }
-}
-
 android {
     compileSdk 34
     namespace 'com.yourdictionary.app'
@@ -36,8 +30,6 @@ android {
 
 dependencies {
     implementation 'androidx.appcompat:appcompat:1.6.1'
-    // Huawei HMS Ads — replaces AdMob entirely
     implementation 'com.huawei.hms:ads-lite:13.4.66.300'
-    // Huawei AGConnect core (required for agconnect-services.json)
     implementation 'com.huawei.agconnect:agconnect-core:1.9.1.301'
 }
