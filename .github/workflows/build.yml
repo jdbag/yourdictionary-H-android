@@ -1,4 +1,4 @@
-name: Build APK
+name: Build Release APK
 
 on:
   push:
@@ -40,12 +40,36 @@ jobs:
             cp app/src/main/res/mipmap-$d/ic_launcher.png app/src/main/res/mipmap-$d/ic_launcher_round.png
           done
 
-      - name: Build Debug APK
-        run: gradle assembleDebug
+      - name: Generate Keystore
+        run: |
+          keytool -genkeypair \
+            -alias yourdictionary \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 10000 \
+            -keystore app/yourdictionary.jks \
+            -storepass YourDict2024! \
+            -keypass YourDict2024! \
+            -dname "CN=YourDictionary, OU=App, O=YourDictionary, L=Algiers, ST=Algeria, C=DZ" \
+            -noprompt
 
-      - name: Upload APK
+      - name: Build Release APK
+        run: |
+          gradle assembleRelease \
+            -Pandroid.injected.signing.store.file=yourdictionary.jks \
+            -Pandroid.injected.signing.store.password=YourDict2024! \
+            -Pandroid.injected.signing.key.alias=yourdictionary \
+            -Pandroid.injected.signing.key.password=YourDict2024!
+        working-directory: app
+
+      - name: Verify APK signed
+        run: |
+          find . -name "*.apk" -type f
+          ls -lh app/build/outputs/apk/release/
+
+      - name: Upload Release APK
         uses: actions/upload-artifact@v4
         with:
-          name: YourDictionary-APK
-          path: app/build/outputs/apk/debug/app-debug.apk
+          name: YourDictionary-Release-APK
+          path: app/build/outputs/apk/release/app-release.apk
           retention-days: 90
